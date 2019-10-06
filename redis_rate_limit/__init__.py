@@ -62,10 +62,13 @@ class RateLimit(ContextDecorator):
         :param client: client identifier string (i.e. ‘192.168.0.10’)
         :param max_requests: integer (i.e. ‘10’)
         :param expire: seconds to wait before resetting counters (i.e. ‘60’)
-        :param redis_pool: instance of redis.ConnectionPool.
+        :param redis_pool: instance of redis.ConnectionPool or instance of redis.Redis
                Default: ConnectionPool(host='127.0.0.1', port=6379, db=0)
         """
-        self._redis = Redis(connection_pool=redis_pool)
+        if isinstance(redis_pool, Redis):
+            self._redis = redis_pool
+        else:
+            self._redis = Redis(connection_pool=redis_pool)
         if not self._is_rate_limit_supported():
             raise RedisVersionNotSupported()
 

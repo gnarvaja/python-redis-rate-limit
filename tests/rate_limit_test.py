@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import unittest
 import time
+from redis import Redis
 from redis_rate_limit import RateLimit, RateLimiter, TooManyRequests, SleepRateLimit
 
 
@@ -152,6 +153,19 @@ class TestRedisRateLimit(unittest.TestCase):
         foo()
         t4 = time.time()
         self.assertAlmostEqual(2 * sleep_time, t4 - t3, places=2)
+
+    def test_init_with_redis_instance(self):
+        """
+        Should return the usage when used as a context manager.
+        """
+        self.rate_limit = RateLimit(
+            resource='test', client='localhost',
+            max_requests=1, expire=1,
+            redis_pool=Redis(host='127.0.0.1', port=6379, db=0)
+        )
+
+        with self.rate_limit as usage:
+            self.assertEqual(usage, 1)
 
 
 if __name__ == '__main__':
