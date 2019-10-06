@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 #  -*- coding: utf-8 -*-
+import time
+from contextlib import ContextDecorator
 from hashlib import sha1
 from distutils.version import StrictVersion
 from redis.exceptions import NoScriptError
@@ -20,6 +22,13 @@ INCREMENT_SCRIPT_HASH = sha1(INCREMENT_SCRIPT).hexdigest()
 REDIS_POOL = ConnectionPool(host='127.0.0.1', port=6379, db=0)
 
 
+def fibonacci(n):
+    a, b = 0, 1
+    for i in range(0, n):
+        a, b = b, a + b
+    return a
+
+
 class RedisVersionNotSupported(Exception):
     """
     Rate Limit depends on Redis’ commands EVALSHA and EVAL which are
@@ -36,7 +45,7 @@ class TooManyRequests(Exception):
     pass
 
 
-class RateLimit(object):
+class RateLimit(ContextDecorator):
     """
     This class offers an abstraction of a Rate Limit algorithm implemented on
     top of Redis >= 2.6.0.
@@ -119,9 +128,12 @@ class RateLimit(object):
                 INCREMENT_SCRIPT, 1, self._rate_limit_key, self._expire)
 
         if int(current_usage) > self._max_requests:
-            raise TooManyRequests()
+            self.on_too_many_requests(int(current_usage), self._max_requests)
 
         return current_usage
+
+    def on_too_many_requests(self, current_usage, max_requests):
+        raise TooManyRequests()
 
     def _is_rate_limit_supported(self):
         """
@@ -141,6 +153,21 @@ class RateLimit(object):
         matching_keys = self._redis.scan_iter(match='{0}*'.format('rate_limit:*'))
         for rate_limit_key in matching_keys:
             self._redis.delete(rate_limit_key)
+
+
+class SleepRateLimit(RateLimit):
+    def __init__(self, resource, client, max_requests, expire=None, redis_pool=REDIS_POOL,
+                 sleep_time=1.0, sleep_multiplier="fibonacci"):
+        super().__init__(resource, client, max_requests, expire, redis_pool)
+        self.sleep_time = sleep_time
+        self.sleep_multiplier = sleep_multiplier
+
+    def on_too_many_requests(self, current_usage, max_requests):
+        difference = current_usage - max_requests
+        if self.sleep_multiplier == "fibonacci":
+            time.sleep(self.sleep_time * fibonacci(difference))
+        else:
+            time.sleep(self.sleep_time)
 
 
 class RateLimiter(object):

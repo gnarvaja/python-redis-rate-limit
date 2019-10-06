@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import unittest
 import time
-from redis_rate_limit import RateLimit, RateLimiter, TooManyRequests
+from redis_rate_limit import RateLimit, RateLimiter, TooManyRequests, SleepRateLimit
 
 
 class TestRedisRateLimit(unittest.TestCase):
@@ -88,7 +88,7 @@ class TestRedisRateLimit(unittest.TestCase):
     def test_wait_time_limit_reached(self):
         """
         Should report wait time approximately equal to expire after reaching
-        the limit without delay between requests. 
+        the limit without delay between requests.
         """
         self.rate_limit = RateLimit(resource='test', client='localhost',
                                     max_requests=10, expire=1)
@@ -96,7 +96,7 @@ class TestRedisRateLimit(unittest.TestCase):
         with self.assertRaises(TooManyRequests):
             with self.rate_limit:
                 pass
-        self.assertAlmostEqual(self.rate_limit.get_wait_time(), 1, places=2)
+        self.assertAlmostEqual(self.rate_limit.get_wait_time(), 1, places=1)
 
     def test_wait_time_limit_expired(self):
         """
@@ -119,7 +119,40 @@ class TestRedisRateLimit(unittest.TestCase):
         with self.rate_limit as usage:
             self.assertEqual(usage, 1)
 
+    def test_decorator(self):
+
+        @RateLimit(resource='test', client='localhost', max_requests=1, expire=1)
+        def foo():
+            pass
+
+        foo()
+        with self.assertRaises(TooManyRequests):
+            foo()
+
+    def test_sleep_rate_limit(self):
+        sleep_time = 0.2
+
+        @SleepRateLimit(resource='test', client='localhost', max_requests=1, expire=10, sleep_time=sleep_time)
+        def foo():
+            pass
+
+        t0 = time.time()
+        foo()
+        t1 = time.time()
+        self.assertAlmostEqual(0, t1 - t0, places=1)
+
+        foo()
+        t2 = time.time()
+        self.assertAlmostEqual(sleep_time, t2 - t1, places=2)
+
+        foo()
+        t3 = time.time()
+        self.assertAlmostEqual(sleep_time, t3 - t2, places=2)
+
+        foo()
+        t4 = time.time()
+        self.assertAlmostEqual(2 * sleep_time, t4 - t3, places=2)
+
 
 if __name__ == '__main__':
     unittest.main()
-
