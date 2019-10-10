@@ -156,7 +156,7 @@ class TestRedisRateLimit(unittest.TestCase):
 
     def test_init_with_redis_instance(self):
         """
-        Should return the usage when used as a context manager.
+        RateLimit can be initialized with Redis instead of pool
         """
         self.rate_limit = RateLimit(
             resource='test', client='localhost',
@@ -166,6 +166,36 @@ class TestRedisRateLimit(unittest.TestCase):
 
         with self.rate_limit as usage:
             self.assertEqual(usage, 1)
+
+    def test_init_with_callable(self):
+        """
+        RateLimit can be initialized with a callable, to be called on the first use
+        """
+        self.get_pool_calls = 0
+
+        def get_pool():
+            self.get_pool_calls += 1
+            return Redis(host='127.0.0.1', port=6379, db=0)
+
+        rate_limit = RateLimit(
+            resource='test', client='localhost',
+            max_requests=5, expire=1,
+            redis_pool=get_pool
+        )
+
+        self.assertEqual(0, self.get_pool_calls)
+
+        @rate_limit
+        def use(expected_usage):
+            self.assertEqual(rate_limit.get_usage(), expected_usage)
+            self.assertEqual(1, self.get_pool_calls)
+
+        self.assertEqual(0, self.get_pool_calls)
+
+        use(1)
+        self.assertEqual(1, self.get_pool_calls)
+        use(2)  # callable only one time, then cached
+        self.assertEqual(1, self.get_pool_calls)
 
 
 if __name__ == '__main__':
