@@ -65,30 +65,14 @@ class RateLimit(ContextDecorator):
         :param redis_pool: instance of redis.ConnectionPool or instance of redis.Redis
                Default: ConnectionPool(host='127.0.0.1', port=6379, db=0)
         """
-        if callable(redis_pool):
-            self.__redis = None
-            self._redis_callable = redis_pool
-        elif isinstance(redis_pool, Redis):
-            self.__redis = redis_pool
-        else:
-            self.__redis = Redis(connection_pool=redis_pool)
+        self._redis = Redis(connection_pool=redis_pool)
 
-        if self.__redis and not self._is_rate_limit_supported():
+        if self._redis and not self._is_rate_limit_supported():
             raise RedisVersionNotSupported()
 
         self._rate_limit_key = "rate_limit:{0}_{1}".format(resource, client)
         self._max_requests = max_requests
         self._expire = expire or 1
-
-    @property
-    def _redis(self):
-        if self.__redis is None:
-            redis_pool = self._redis_callable()
-            if isinstance(redis_pool, Redis):
-                self.__redis = redis_pool
-            else:
-                self.__redis = Redis(connection_pool=redis_pool)
-        return self.__redis
 
     def __enter__(self):
         return self.increment_usage()
